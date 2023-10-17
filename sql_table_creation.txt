@@ -1,0 +1,184 @@
+create database project;
+use database project;
+
+CREATE OR REPLACE TABLE ACCOUNT(
+account_id INT PRIMARY KEY,
+district_id	INT,
+frequency	VARCHAR(40),
+Date DATE ,
+Account_Type VARCHAR(100) ,
+Card_Assigned VARCHAR(20),
+FOREIGN KEY (district_id) references DISTRICT(District_Code) 
+);
+
+-----------------------------------------------------------
+
+create or replace table CARD(
+card_id	INT PRIMARY KEY,
+disp_id	INT,
+`type` CHAR(10)	,
+issued DATE,
+FOREIGN KEY (disp_id) references DISPOSITION(disp_id)
+);
+------------------------------------------
+create or replace table Client(
+client_id  int primary key,
+Sex char(10),
+Birth_date Date,
+district_id int,
+FOREIGN KEY (district_id) references DISTRICT(District_Code) 
+);
+-------------------------------------------------
+CREATE OR REPLACE TABLE DISPOSITION(
+disp_id	INT PRIMARY KEY,
+client_id INT,
+account_id	INT,
+type CHAR(15),
+FOREIGN KEY (account_id) references ACCOUNT(account_id),
+FOREIGN KEY (client_id) references CLIENT(client_id)
+);
+
+
+------------------------------------------------------
+CREATE or replace TABLE DISTRICT(
+District_Code INT PRIMARY KEY	,
+District_Name VARCHAR(100)	,
+Region VARCHAR(100)	,
+No_of_inhabitants	INT,
+No_of_municipalities_with_inhabitants_less_499 INT,
+No_of_municipalities_with_inhabitants_500_btw_1999	INT,
+No_of_municipalities_with_inhabitants_2000_btw_9999	INT,
+No_of_municipalities_with_inhabitants_less_10000 INT,	
+No_of_cities	INT,
+Ratio_of_urban_inhabitants	FLOAT,
+Average_salary	INT,
+No_of_entrepreneurs_per_1000_inhabitants	INT,
+No_committed_crime_2017	INT,
+No_committed_crime_2018 INT
+) ;
+-----------------------------------------------
+CREATE TABLE LOAN(
+loan_id int,
+account_id int,
+`date` date,
+amount int,
+duration int,
+payments int,
+`status` varchar(35)
+ );
+ alter table loan add constraint fore_KEY
+ FOREIGN KEY (ACCOUNT_ID) REFERENCES ACCOUNT(ACCOUNT_ID);
+ -----------------------------------------------------
+create or replace table transaction(
+ trans_id int ,
+ account_id int,
+ `date` date,
+ `type`  varchar(30),
+ operation varchar(40),
+ amount int,
+ balance float,
+ purpose varchar(40),
+ bank varchar(40),
+ account_pattern_id int,
+ FOREIGN KEY (account_id) references ACCOUNT(account_id)
+ );
+ --------------------------------------------------------------
+ CREATE TABLE `ORDER`(
+order_id	INT PRIMARY KEY,
+account_id	INT,
+bank_to	VARCHAR(45),
+account_to	INT,
+amount FLOAT,
+FOREIGN KEY (account_id) references ACCOUNT(account_id)
+);
+------------------------------------------------------------------
+
+create or replace STORAGE integration s3_int
+type=external_stage
+storage_provider=s3
+enabled=true
+storage_aws_role_arn='arn:aws:iam::798227111673:role/Bankrolepolicy'
+storage_allowed_locations=('s3://czechobank/');
+
+desc integration s3_int;
+
+
+create or replace stage Bank
+URL='s3://czechobank'
+file_format=CSV
+storage_integration=s3_int;
+
+list@Bank;
+show stages;
+
+--CREATE SNOWPIPE THAT RECOGNISES CSV THAT ARE INGESTED FROM EXTERNAL STAGE AND COPIES THE DATA INTO EXISTING TABLE
+
+--The AUTO_INGEST=true parameter specifies to read 
+--- event notifications sent from an S3 bucket to an SQS queue when new data is ready to load.
+
+
+create or replace pipe BANK_SNOWPIPE_DISTRICT AUTO_INGEST=TRUE AS
+COPY INTO DISTRICT
+FROM '@Bank/district/'   --s3 bucket subfolde4r name
+FILE_FORMAT = CSV;
+
+
+
+
+create or replace pipe BANK_SNOWPIPE_ACCOUNT AUTO_INGEST=TRUE AS
+COPY INTO ACCOUNT
+FROM '@Bank/Account/'   --s3 bucket subfolde4r name
+FILE_FORMAT = CSV;
+
+
+CREATE OR REPLACE PIPE BANK_SNOWPIPE_TXNS AUTO_INGEST = TRUE AS
+COPY INTO PROJECT.PUBLIC.TRANSACTION
+FROM '@BANK/tranx/'
+FILE_FORMAT = CSV;
+
+CREATE OR REPLACE PIPE BANK_SNOWPIPE_DISP AUTO_INGEST = TRUE AS
+COPY INTO DISPOSITION
+FROM '@BANK/Disposition/'
+FILE_FORMAT = CSV;
+
+CREATE OR REPLACE PIPE BANK_SNOWPIPE_CARD AUTO_INGEST = TRUE AS
+COPY INTO CARD
+FROM '@BANK/CARD/'
+FILE_FORMAT = CSV;
+
+CREATE OR REPLACE PIPE BANK_SNOWPIPE_ORDER_LIST AUTO_INGEST = TRUE AS
+COPY INTO PROJECT.PUBLIC."`ORDER`"
+FROM '@BANK/order/'
+FILE_FORMAT = CSV;
+
+CREATE OR REPLACE PIPE BANK_SNOWPIPE_LOAN AUTO_INGEST = TRUE AS
+COPY INTO PROJECT.PUBLIC.LOAN
+FROM '@BANK/loan/'
+FILE_FORMAT = CSV;
+
+CREATE OR REPLACE PIPE BANK_SNOWPIPE_CLIENT AUTO_INGEST = TRUE AS
+COPY INTO PROJECT.PUBLIC.CLIENT
+FROM '@BANK/client/'
+FILE_FORMAT = CSV;
+
+SHOW PIPES;
+SELECT COUNT(*) FROM account;
+SELECT COUNT(*) FROM district;
+SELECT count(*) FROM DISPOSITION;
+SELECT count(*) FROM CARD;
+SELECT count(*) FROM "`ORDER`";
+SELECT count(*) FROM LOAN;
+SELECT count(*) FROM CLIENT;
+select count(*) from transaction;
+LIST@BANK;
+
+ALTER PIPE BANK_SNOWPIPE_DISTRICT REFRESH;
+ALTER PIPE BANK_SNOWPIPE_ACCOUNT REFRESH;
+alter pipe BANK_SNOWPIPE_DISP refresh;
+ALTER PIPE BANK_SNOWPIPE_CARD REFRESH;
+ALTER PIPE BANK_SNOWPIPE_ORDER_LIST REFRESH;
+ALTER PIPE BANK_SNOWPIPE_LOAN REFRESH;
+ALTER PIPE BANK_SNOWPIPE_CLIENT REFRESH;
+ALTER PIPE BANK_SNOWPIPE_TXNS REFRESH;
+
+select SYSTEM$PIPE_STATUS('BANK_SNOWPIPE_DISTRICT');
